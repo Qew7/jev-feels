@@ -20,7 +20,6 @@ Gem::Specification.new do |spec|
   spec.metadata["source_code_uri"] = spec.homepage
   spec.metadata["changelog_uri"] = "#{spec.homepage}/blob/main/README.md"
   spec.metadata["allowed_push_host"] = "https://rubygems.org"
-  spec.metadata["rubygems_mfa_required"] = "true"
 
   spec.files = Dir["lib/**/*.rb", "LICENSE", "README.md", "context7.json"]
   spec.require_paths = ["lib"]
