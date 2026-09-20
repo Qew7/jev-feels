@@ -140,4 +140,36 @@ RSpec.describe "Jev.feels / Jev.feels?" do
     expect($CHILD_STATUS).to be_success
     expect(output).to eq("constant")
   end
+
+  it "uses a model-scoped definition when the same name exists twice" do
+    email = Class.new
+    comment = Class.new
+    Jev.define email, :urgent, "Outage, customers cannot sign in"
+    Jev.define comment, :urgent, "Legal takedown request"
+    transport = stub_noul(0.9)
+
+    Jev.feels("the site is down", email, :urgent)
+
+    expect(transport.calls.last.dig("questions", "feels", "instructions"))
+      .to eq("Outage, customers cannot sign in")
+  end
+
+  it "falls back to a global definition when the model has no override" do
+    email = Class.new
+    transport = stub_noul(0.9)
+
+    Jev.feels("the site is down", email, :urgent)
+
+    expect(transport.calls.last.dig("questions", "feels", "instructions"))
+      .to eq("Requires immediate attention or action")
+  end
+
+  it "raises when a scoped name is missing and there is no global" do
+    email = Class.new
+
+    expect { Jev.feels?("hello", email, :missing) }.to raise_error(
+      Jev::UndefinedDefinition,
+      "Undefined Jev definition: :missing for #{email}"
+    )
+  end
 end

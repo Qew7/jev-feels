@@ -49,4 +49,27 @@ RSpec.describe "Jev definitions" do
 
     expect(Jev.definitions.size).to eq(400)
   end
+
+  it "scopes the same name to different classes" do
+    email = Class.new
+    comment = Class.new
+    Jev.define email, :urgent, "Outage, customers cannot sign in"
+    Jev.define comment, :urgent, "Legal takedown request"
+
+    expect(Jev.definition(email, :urgent)).to eq("Outage, customers cannot sign in")
+    expect(Jev.definition(comment, :urgent)).to eq("Legal takedown request")
+    expect(Jev.definition(:urgent)).to be_nil
+    expect(Jev.definitions(email)).to eq(urgent: "Outage, customers cannot sign in")
+    expect { Jev.definitions(email)[:urgent] = "hacked" }.to raise_error(FrozenError)
+  end
+
+  it "replaces only the scoped definition" do
+    email = Class.new
+    Jev.define :urgent, "global"
+    Jev.define email, :urgent, "old"
+    Jev.define email, :urgent, "new"
+
+    expect(Jev.definition(email, :urgent)).to eq("new")
+    expect(Jev.definition(:urgent)).to eq("global")
+  end
 end

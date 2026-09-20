@@ -7,19 +7,28 @@ module Jev
       @definitions = {}
     end
 
-    def define(name, description)
+    def define(scope, name, description)
       key = name.to_sym
       value = description.to_s.dup.freeze
-      @mutex.synchronize { @definitions[key] = value }
+      @mutex.synchronize do
+        (@definitions[scope] ||= {})[key] = value
+      end
       value
     end
 
-    def fetch(name)
-      @mutex.synchronize { @definitions[name.to_sym] }
+    def fetch(name, scope: nil, fallback: true)
+      key = name.to_sym
+      @mutex.synchronize do
+        scoped = @definitions.dig(scope, key) if scope
+        return scoped if scoped
+        return unless fallback || scope.nil?
+
+        @definitions.dig(nil, key)
+      end
     end
 
-    def all
-      @mutex.synchronize { @definitions.dup.freeze }
+    def all(scope = nil)
+      @mutex.synchronize { (@definitions[scope] || {}).dup.freeze }
     end
 
     def reset!

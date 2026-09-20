@@ -14,11 +14,15 @@ Metrics/BlockLength:
 Metrics/MethodLength:
   Max: 30
 
+Gemspec/RequireMFA:
+  Enabled: false
+
 Naming/FileName:
   Exclude:
     - lib/feels.rb
     - lib/feels/string.rb
     - lib/jev-feels.rb
+    - lib/jev-feels/string.rb
 
 Style/Documentation:
   Enabled: false

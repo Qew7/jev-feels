@@ -24,4 +24,15 @@ RSpec.describe Jev::Feels do
   it "accepts an ad-hoc string predicate" do
     expect("please cancel".feels?("sounds like the sender is about to cancel their subscription")).to be true
   end
+
+  it "forwards a scoped predicate" do
+    email = Class.new
+    Jev.define email, :urgent, "Outage, customers cannot sign in"
+    transport = FakeTransport.new(noul: 0.94)
+    Jev.configure { |config| config.transport = transport }
+
+    expect("the site is down".feels?(email, :urgent)).to be true
+    expect(transport.calls.last.dig("questions", "feels", "instructions"))
+      .to eq("Outage, customers cannot sign in")
+  end
 end

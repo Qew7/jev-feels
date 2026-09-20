@@ -25,6 +25,56 @@ if Jev.feels?(email, :urgent)
 end
 ```
 
+## Ruby on Rails
+
+Gemfile, initializer, then an ordinary condition. Bundler loads the gem — no extra `require` unless you want sugar on `String`.
+
+```ruby
+# Gemfile
+gem "jev-feels"
+```
+
+```ruby
+# config/initializers/jev.rb
+Jev.configure do |config|
+  config.api_key = ENV.fetch("JEV_API_KEY")
+end
+
+Jev.define :urgent, "Requires immediate attention or action"
+Jev.define SupportEmail, :urgent, "Outage, customers cannot sign in"
+Jev.define Comment, :urgent, "Legal takedown or self-harm"
+```
+
+```ruby
+class SupportEmail < ApplicationRecord
+  def urgent?
+    Jev.feels?(body, SupportEmail, :urgent)
+  end
+end
+```
+
+To use `#feels?` on strings across the app, require the String extension in the initializer:
+
+```ruby
+# config/initializers/jev.rb
+require "jev-feels/string"
+
+Jev.configure do |config|
+  config.api_key = ENV.fetch("JEV_API_KEY")
+end
+
+Jev.define :urgent, "Requires immediate attention or action"
+Jev.define SupportEmail, :urgent, "Outage, customers cannot sign in"
+```
+
+```ruby
+class SupportEmail < ApplicationRecord
+  def urgent?
+    body.feels?(SupportEmail, :urgent)
+  end
+end
+```
+
 ## String sugar
 
 `require "feels"` does not change `String`. Opt in with a refinement:
@@ -39,6 +89,7 @@ Or, if you really want a global patch:
 
 ```ruby
 require "feels/string"
+# or: require "jev-feels/string"
 
 email.feels?(:urgent)
 ```
@@ -77,11 +128,16 @@ Jev.define :urgent, "Requires immediate attention or action"
 Jev.define :spam, "Unsolicited or unwanted promotional content"
 Jev.define :angry, "Expresses anger or hostility"
 
+Jev.define Email, :urgent, "Outage, customers cannot sign in"
+Jev.define Comment, :urgent, "Legal takedown or self-harm"
+
 Jev.definition(:urgent)
+Jev.definition(Email, :urgent)
 Jev.definitions
+Jev.definitions(Email)
 ```
 
-`define` replaces an existing name. `definitions` returns a frozen copy of the registry.
+`define` replaces an existing name in that scope. `Jev.feels?(text, Email, :urgent)` uses the Email definition, then falls back to the global `:urgent` if Email has none. `definitions` / `definitions(Email)` return frozen copies.
 
 ## Configuration
 
