@@ -1,6 +1,6 @@
 {
   "$schema": "https://context7.com/schema/context7.json",
   "projectTitle": "jev-feels",
-  "description": "Ruby-like semantic text predicates via Jev. Jev.feels?(:urgent) is an ordinary condition, not an SDK session.",
+  "description": "Ruby-like semantic text predicates via Jev. Jev.feels?(:urgent) and model#feels?(:urgent) are ordinary conditions, not an SDK session.",
   "excludeFolders": ["spec"]
 }
