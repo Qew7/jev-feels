@@ -25,4 +25,11 @@ RSpec.configure do |config|
     Jev.reset_configuration!
     Jev.reset_definitions!
   end
+
+  config.around(:example, :live) do |example|
+    WebMock.allow_net_connect!
+    example.run
+  ensure
+    WebMock.disable_net_connect!
+  end
 end
