@@ -1,0 +1,27 @@
+AllCops:
+  TargetRubyVersion: 3.2
+  NewCops: enable
+  SuggestExtensions: false
+
+Layout/LineLength:
+  Max: 120
+
+Metrics/BlockLength:
+  Exclude:
+    - spec/**/*
+    - jev-feels.gemspec
+
+Metrics/MethodLength:
+  Max: 30
+
+Naming/FileName:
+  Exclude:
+    - lib/feels.rb
+    - lib/feels/string.rb
+    - lib/jev-feels.rb
+
+Style/Documentation:
+  Enabled: false
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes

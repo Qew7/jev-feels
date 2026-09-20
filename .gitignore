@@ -1,0 +1,11 @@
+/.bundle/
+/coverage/
+/pkg/
+/spec/reports/
+/tmp/
+*.gem
+Gemfile.lock
+.rspec_status
+.rubocop-*.yml
+.env
+.env.*
