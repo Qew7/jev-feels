@@ -172,4 +172,48 @@ RSpec.describe "Jev.feels / Jev.feels?" do
       "Undefined Jev definition: :missing for #{email}"
     )
   end
+
+  it "uses a parent class definition for a subclass" do
+    comment = named_class("Comment")
+    moderated = named_class("ModeratedComment", parent: comment)
+    Jev.define comment, :urgent, "Legal takedown request"
+    transport = stub_noul(0.9)
+
+    Jev.feels("take this down", moderated, :urgent)
+
+    expect(transport.calls.last.dig("questions", "feels", "instructions"))
+      .to eq("Legal takedown request")
+  end
+
+  it "prefers the subclass definition over the parent" do
+    comment = named_class("Comment")
+    moderated = named_class("ModeratedComment", parent: comment)
+    Jev.define comment, :urgent, "parent"
+    Jev.define moderated, :urgent, "child"
+    transport = stub_noul(0.9)
+
+    Jev.feels("take this down", moderated, :urgent)
+
+    expect(transport.calls.last.dig("questions", "feels", "instructions")).to eq("child")
+  end
+
+  it "looks up a string scope the same as the model class" do
+    Jev.define "SupportEmail", :urgent, "Outage, customers cannot sign in"
+    transport = stub_noul(0.9)
+
+    Jev.feels("the site is down", named_class("SupportEmail"), :urgent)
+
+    expect(transport.calls.last.dig("questions", "feels", "instructions"))
+      .to eq("Outage, customers cannot sign in")
+  end
+
+  it "looks up a symbol scope the same as the model class" do
+    Jev.define :SupportEmail, :urgent, "Outage, customers cannot sign in"
+    transport = stub_noul(0.9)
+
+    Jev.feels("the site is down", :SupportEmail, :urgent)
+
+    expect(transport.calls.last.dig("questions", "feels", "instructions"))
+      .to eq("Outage, customers cannot sign in")
+  end
 end

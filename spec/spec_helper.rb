@@ -33,3 +33,9 @@ RSpec.configure do |config|
     WebMock.disable_net_connect!
   end
 end
+
+def named_class(class_name, parent: Object)
+  Class.new(parent) do
+    define_singleton_method(:name) { class_name }
+  end
+end

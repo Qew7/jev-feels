@@ -7,6 +7,7 @@ require_relative "jev/registry"
 require_relative "jev/transport"
 require_relative "jev/client"
 require_relative "jev/feels"
+require_relative "jev/model"
 
 module Jev
   class << self
@@ -22,30 +23,26 @@ module Jev
     end
 
     def define(scope_or_name, name_or_description, description = nil)
-      if scope_or_name.is_a?(Module)
-        raise ArgumentError, "description is required" if description.nil?
-
-        registry.define(scope_or_name, name_or_description, description)
-      else
-        raise ArgumentError, "wrong number of arguments (given 3, expected 2)" unless description.nil?
+      if description.nil?
+        if scope_or_name.is_a?(Module) || name_or_description.is_a?(Symbol)
+          raise ArgumentError, "description is required"
+        end
 
         registry.define(nil, scope_or_name, name_or_description)
+      else
+        registry.define(scope_or_name, name_or_description, description)
       end
     end
 
     def definition(scope_or_name, name = nil)
       if name.nil?
-        registry.fetch(scope_or_name, scope: nil, fallback: false)
+        registry.fetch(scope_or_name, scope: nil, fallback: false, inherit: false)
       else
-        raise ArgumentError, "scope must be a Module" unless scope_or_name.is_a?(Module)
-
-        registry.fetch(name, scope: scope_or_name, fallback: false)
+        registry.fetch(name, scope: scope_or_name, fallback: false, inherit: false)
       end
     end
 
     def definitions(scope = nil)
-      raise ArgumentError, "scope must be a Module" unless scope.nil? || scope.is_a?(Module)
-
       registry.all(scope)
     end
 
@@ -86,9 +83,13 @@ module Jev
 
     def unpack_predicate(scope_or_predicate, predicate)
       return [nil, scope_or_predicate] if predicate.nil?
-      raise ArgumentError, "scope must be a Module" unless scope_or_predicate.is_a?(Module)
+      raise ArgumentError, "scope must be a Module, String, or Symbol" unless scoped?(scope_or_predicate)
 
       [scope_or_predicate, predicate]
+    end
+
+    def scoped?(value)
+      value.is_a?(Module) || value.is_a?(String) || value.is_a?(Symbol)
     end
 
     def resolve(predicate, scope: nil)

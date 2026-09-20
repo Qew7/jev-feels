@@ -72,4 +72,41 @@ RSpec.describe "Jev definitions" do
     expect(Jev.definition(email, :urgent)).to eq("new")
     expect(Jev.definition(:urgent)).to eq("global")
   end
+
+  it "keys named classes by name so a reload still finds them" do
+    original = named_class("SupportEmail")
+    reloaded = named_class("SupportEmail")
+    Jev.define original, :urgent, "Outage, customers cannot sign in"
+
+    expect(Jev.definition(reloaded, :urgent)).to eq("Outage, customers cannot sign in")
+    expect(Jev.definitions("SupportEmail")).to eq(urgent: "Outage, customers cannot sign in")
+  end
+
+  it "accepts a class name string without loading the constant" do
+    Jev.define "SupportEmail", :urgent, "Outage, customers cannot sign in"
+
+    expect(Jev.definition("SupportEmail", :urgent)).to eq("Outage, customers cannot sign in")
+    expect(Jev.definition(named_class("SupportEmail"), :urgent)).to eq("Outage, customers cannot sign in")
+  end
+
+  it "treats a class name symbol the same as the class" do
+    Jev.define :SupportEmail, :urgent, "Outage, customers cannot sign in"
+
+    expect(Jev.definition(:SupportEmail, :urgent)).to eq("Outage, customers cannot sign in")
+    expect(Jev.definition("SupportEmail", :urgent)).to eq("Outage, customers cannot sign in")
+    expect(Jev.definition(named_class("SupportEmail"), :urgent)).to eq("Outage, customers cannot sign in")
+  end
+
+  it "requires a description when the second argument is a predicate" do
+    expect { Jev.define :SupportEmail, :urgent }.to raise_error(ArgumentError, "description is required")
+    expect { Jev.define(Class.new, :urgent) }.to raise_error(ArgumentError, "description is required")
+  end
+
+  it "does not treat a subclass as the same scope for definition lookup" do
+    comment = named_class("Comment")
+    moderated = named_class("ModeratedComment", parent: comment)
+    Jev.define comment, :urgent, "Legal takedown request"
+
+    expect(Jev.definition(moderated, :urgent)).to be_nil
+  end
 end

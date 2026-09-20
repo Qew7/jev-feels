@@ -27,7 +27,7 @@ end
 
 ## Ruby on Rails
 
-Gemfile, initializer, then an ordinary condition. Bundler loads the gem — no extra `require` unless you want sugar on `String`.
+Configure once, declare predicates on the model, ask the record:
 
 ```ruby
 # Gemfile
@@ -39,41 +39,22 @@ gem "jev-feels"
 Jev.configure do |config|
   config.api_key = ENV.fetch("JEV_API_KEY")
 end
-
-Jev.define :urgent, "Requires immediate attention or action"
-Jev.define SupportEmail, :urgent, "Outage, customers cannot sign in"
-Jev.define Comment, :urgent, "Legal takedown or self-harm"
 ```
 
 ```ruby
 class SupportEmail < ApplicationRecord
-  def urgent?
-    Jev.feels?(body, SupportEmail, :urgent)
-  end
-end
-```
+  include Jev::Model
 
-To use `#feels?` on strings across the app, require the String extension in the initializer:
-
-```ruby
-# config/initializers/jev.rb
-require "jev-feels/string"
-
-Jev.configure do |config|
-  config.api_key = ENV.fetch("JEV_API_KEY")
+  feels :body, :urgent, "Outage, customers cannot sign in"
 end
 
-Jev.define :urgent, "Requires immediate attention or action"
-Jev.define SupportEmail, :urgent, "Outage, customers cannot sign in"
+email.feels?(:urgent)
+email.feels(:urgent)
 ```
 
-```ruby
-class SupportEmail < ApplicationRecord
-  def urgent?
-    body.feels?(SupportEmail, :urgent)
-  end
-end
-```
+The class is the scope, the first argument is the field. No model name, no `email.body.feels?`.
+
+String sugar is still opt-in (`using Jev::Feels` or `require "jev-feels/string"`) if you want `body.feels?(:urgent)` on a raw string.
 
 ## String sugar
 
@@ -134,10 +115,10 @@ Jev.define Comment, :urgent, "Legal takedown or self-harm"
 Jev.definition(:urgent)
 Jev.definition(Email, :urgent)
 Jev.definitions
-Jev.definitions(Email)
+Jev.definitions(Comment)
 ```
 
-`define` replaces an existing name in that scope. `Jev.feels?(text, Email, :urgent)` uses the Email definition, then falls back to the global `:urgent` if Email has none. `definitions` / `definitions(Email)` return frozen copies.
+`define` replaces an existing name in that scope. Scopes are stored by class name, so `Email`, `"Email"` and `:Email` are the same key. `include Jev::Model` plus `feels :body, :urgent, "..."` does the same define and remembers the field. `Jev.feels?(text, Email, :urgent)` uses Email's definition, then a superclass, then the global `:urgent`. `definitions` returns a frozen copy.
 
 ## Configuration
 
