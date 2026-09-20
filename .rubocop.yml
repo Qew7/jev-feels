@@ -14,6 +14,24 @@ Metrics/BlockLength:
 Metrics/MethodLength:
   Max: 30
 
+Metrics/ParameterLists:
+  Max: 6
+
+Metrics/ClassLength:
+  Exclude:
+    - lib/jev.rb
+    - lib/jev/definition.rb
+    - lib/jev/harness.rb
+
+Metrics/ModuleLength:
+  Exclude:
+    - lib/jev.rb
+    - lib/jev/definition.rb
+
+Naming/PredicateMethod:
+  Exclude:
+    - lib/jev/result.rb
+
 Gemspec/RequireMFA:
   Enabled: false
 
@@ -21,8 +39,10 @@ Naming/FileName:
   Exclude:
     - lib/feels.rb
     - lib/feels/string.rb
+    - lib/feels/active_model.rb
     - lib/jev-feels.rb
     - lib/jev-feels/string.rb
+    - lib/jev-feels/active_model.rb
 
 Style/Documentation:
   Enabled: false

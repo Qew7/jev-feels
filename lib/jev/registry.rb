@@ -7,14 +7,13 @@ module Jev
       @definitions = {}
     end
 
-    def define(scope, name, description)
+    def define(scope, name, definition)
       key = name.to_sym
-      value = description.to_s.dup.freeze
       scope_key = storage_key(scope)
       @mutex.synchronize do
-        (@definitions[scope_key] ||= {})[key] = value
+        (@definitions[scope_key] ||= {})[key] = definition
       end
-      value
+      definition.public_value
     end
 
     def fetch(name, scope: nil, fallback: true, inherit: true)
@@ -33,7 +32,19 @@ module Jev
     end
 
     def all(scope = nil)
-      @mutex.synchronize { (@definitions[storage_key(scope)] || {}).dup.freeze }
+      @mutex.synchronize do
+        (@definitions[storage_key(scope)] || {}).transform_values(&:public_value).freeze
+      end
+    end
+
+    def name_for_instructions(instructions)
+      each_definition { |name, definition| return name if definition.instructions == instructions }
+      nil
+    end
+
+    def find_by_instructions(instructions)
+      each_definition { |_name, definition| return definition if definition.instructions == instructions }
+      nil
     end
 
     def reset!
@@ -41,6 +52,14 @@ module Jev
     end
 
     private
+
+    def each_definition(&block)
+      @mutex.synchronize do
+        @definitions.each_value do |defs|
+          defs.each(&block)
+        end
+      end
+    end
 
     def storage_key(scope)
       return if scope.nil?

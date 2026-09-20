@@ -9,8 +9,9 @@ Gem::Specification.new do |spec|
   spec.email = ["Qew7@users.noreply.github.com"]
   spec.summary = "Ruby-like semantic predicates via Jev"
   spec.description = <<~DESC
-    Tiny Ruby API for semantic text checks. Jev.feels?(:urgent) is an ordinary
-    condition, not an SDK session. Jev stays an implementation detail.
+    Tiny Ruby API for semantic text decisions. Jev.feels?(:urgent), Jev.decide,
+    and Jev.score are ordinary Ruby, not an SDK session. Jev stays an
+    implementation detail.
   DESC
   spec.homepage = "https://github.com/Qew7/jev-feels"
   spec.license = "MIT"
@@ -18,9 +19,9 @@ Gem::Specification.new do |spec|
 
   spec.metadata["homepage_uri"] = spec.homepage
   spec.metadata["source_code_uri"] = spec.homepage
-  spec.metadata["changelog_uri"] = "#{spec.homepage}/blob/master/README.md"
+  spec.metadata["changelog_uri"] = "#{spec.homepage}/blob/master/CHANGELOG.md"
   spec.metadata["allowed_push_host"] = "https://rubygems.org"
 
-  spec.files = Dir["lib/**/*.rb", "LICENSE", "README.md", "context7.json"]
+  spec.files = Dir["lib/**/*.rb", "LICENSE", "README.md", "CHANGELOG.md", "context7.json"]
   spec.require_paths = ["lib"]
 end

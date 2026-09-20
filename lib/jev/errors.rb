@@ -8,4 +8,5 @@ module Jev
   class AuthenticationError < RequestError; end
   class RateLimitError < RequestError; end
   class InvalidResponseError < Error; end
+  class ReplayError < Error; end
 end

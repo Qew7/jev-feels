@@ -12,10 +12,21 @@ module Jev
         subclass.extend ClassMethods
       end
 
-      def feels(attribute, name, description)
+      def feels(attribute, name, description = nil, **options)
+        declare_jev(attribute, name, description, options)
+      end
+
+      def decide(attribute, name, description = nil, **options)
+        declare_jev(attribute, name, description, options)
+      end
+
+      def score(attribute, name, description = nil, **options)
+        declare_jev(attribute, name, description, options)
+      end
+
+      def bind_jev_attribute(attribute, name)
         raise ArgumentError, "attribute must be a Symbol" unless attribute.is_a?(Symbol)
 
-        Jev.define(self, name, description)
         (@jev_feels_attributes ||= {})[name.to_sym] = attribute
       end
 
@@ -28,14 +39,55 @@ module Jev
           current = current.superclass
         end
       end
+
+      def jev_bound_fields
+        fields = []
+        current = self
+        while current && current != Object
+          fields.concat(Array(current.instance_variable_get(:@jev_feels_attributes)&.values))
+          current = current.superclass
+        end
+        fields.uniq
+      end
+
+      private
+
+      def declare_jev(attribute, name, description, options)
+        bind_jev_attribute(attribute, name)
+        return if description.nil? && options.empty?
+
+        Jev.define(self, name, description, **options)
+      end
     end
 
     def feels(predicate)
       Jev.feels(jev_text_for(predicate), self.class, predicate)
     end
 
-    def feels?(predicate, threshold: Jev.configuration.threshold)
-      Jev.feels?(jev_text_for(predicate), self.class, predicate, threshold: threshold)
+    def feels?(predicate, **)
+      Jev.feels?(jev_text_for(predicate), self.class, predicate, **)
+    end
+
+    def decide(predicate, **)
+      Jev.decide(jev_text_for(predicate), self.class, predicate, **)
+    end
+
+    def score(predicate, **)
+      Jev.score(jev_text_for(predicate), self.class, predicate, **)
+    end
+
+    def measure(predicate = nil, **, &)
+      if block_given?
+        Jev.measure(jev_batch_text, self.class, **, &)
+      else
+        raise ArgumentError, "question is required" if predicate.nil?
+
+        Jev.measure(jev_text_for(predicate), self.class, predicate, **)
+      end
+    end
+
+    def match(predicate, **, &)
+      Jev.match(jev_text_for(predicate), self.class, predicate, **, &)
     end
 
     private
@@ -46,6 +98,14 @@ module Jev
       )
 
       public_send(attribute).to_s
+    end
+
+    def jev_batch_text
+      fields = self.class.jev_bound_fields
+      raise ArgumentError, "no Jev field is bound for #{self.class}" if fields.empty?
+      raise ArgumentError, "measure block needs one field, got #{fields.inspect}" if fields.size > 1
+
+      public_send(fields.first).to_s
     end
   end
 end
