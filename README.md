@@ -1,62 +1,26 @@
 # jev-feels
 
-Semantic decisions as ordinary Ruby.
+`email.feels?(:urgent)` is a named question on a field, not a prompt in a service.
+
+## Rails
 
 ```ruby
 # Gemfile
 gem "jev-feels"
+```
+```ruby
+class SupportEmail < ApplicationRecord
+  include Jev::Model
 
-require "feels"
-using Jev::Feels
+  feels :body, :urgent
+  feels :subject, :not_important, "Subject of this email is not important"
+  decide :body, :support_team
 
-Jev.configure do |config|
-  config.api_key = ENV.fetch("JEV_API_KEY")
+  validates_feeling :body, :urgent, threshold: 0.9
 end
 
-Jev.define :urgent, "Requires immediate attention or action"
-
-if email.body.feels?(:urgent)
-  email.mark(:urgent)
-end
-```
-
-The same idea continues for a decision and a scale:
-
-```ruby
-Jev.define :support_team,
-  "Which team should handle this?",
-  choices: {
-    billing: "payments and refunds",
-    technical: "bugs and outages",
-    sales: "purchase questions",
-    other: "none of the above"
-  }
-
-team = Jev.decide(email.body, :support_team)
-```
-
-```ruby
-Jev.define :severity,
-  "How severe is this issue?",
-  levels: {
-    minor: "minor inconvenience",
-    degraded: "workaround exists",
-    blocking: "cannot complete the task",
-    critical: "major outage or severe impact"
-  }
-
-severity = Jev.score(email.body, :severity)
-```
-
-You do not need the Jev JSON wire format or the HTTP API for typical use. `Jev.measure` keeps the full typed result when you do.
-
-## Ruby on Rails
-
-Configure once, declare on the model, ask the record:
-
-```ruby
-# Gemfile
-gem "jev-feels"
+email.feels?(:urgent)        # => true
+email.decide(:support_team)  # => :billing
 ```
 
 ```ruby
@@ -75,23 +39,23 @@ Jev.define :support_team, "Which team should handle this?", choices: {
 }
 ```
 
+The class is the scope, the first argument is the field. `validates_feeling` accepts `allow_nil:`, `allow_blank:`, `if:`, `unless:`, `on:`, `message:`, `at_least:`. If those skip the check, there is no HTTP call. A `nil` from `at_least:` is a validation failure.
+
+## PORO
+
 ```ruby
-class SupportEmail < ApplicationRecord
+class Ticket
   include Jev::Model
 
-  feels :body, :urgent # Get definition from initializer
-  feels :subject, :not_important, "Subject of this email is not important" # Or define in model
-  decide :body, :support_team
-
-  validates_feeling :body, :urgent, threshold: 0.9
+  feels :description, :urgent
+  decide :description, :support_team
 end
 
-email.feels?(:urgent)
-email.feels?(:not_important)
-email.decide(:support_team)
+ticket.feels?(:urgent)
+ticket.decide(:support_team)
 ```
 
-The class is the scope, the first argument is the field. `validates_feeling` accepts `allow_nil:`, `allow_blank:`, `if:`, `unless:`, `on:`, `message:`, `at_least:`. If those skip the check, there is no HTTP call. A `nil` from `at_least:` is a validation failure.
+`Jev::Model` reads `ticket.description` (any method that returns a string). Bind-only uses the global `Jev.define`. Pass a string to define on the class: `feels :description, :happy, "Sounds cheerful"`.
 
 ## String sugar
 
@@ -159,7 +123,7 @@ Jev.definitions
 Jev.definitions(Comment)
 ```
 
-`define` replaces an existing name in that scope. Scopes are stored by class name, so `Email`, `"Email"` and `:Email` are the same key. A yes/no definition reads back as its instruction string. `choices:` / `levels:` read back as a `Jev::Definition`. On a Rails model, `feels` / `decide` / `score` bind a field; see [Ruby on Rails](#ruby-on-rails).
+`define` replaces an existing name in that scope. Scopes are stored by class name, so `Email`, `"Email"` and `:Email` are the same key. A yes/no definition reads back as its instruction string. `choices:` / `levels:` read back as a `Jev::Definition`. On a class that includes `Jev::Model`, `feels` / `decide` / `score` bind a field; see [PORO](#poro) and [Rails](#rails).
 
 A `Symbol` must already have a definition or you get `Jev::UndefinedDefinition`. A `String` is an ad-hoc question and is not registered.
 
