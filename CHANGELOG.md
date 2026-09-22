@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.1.1
+
+### Fixed
+
+- Validate question types before calling the transport and reject malformed Choice and Score response fields with gem errors.
+- Preserve HTTP error classes when an error body is not a JSON object.
+- Resolve autoloaded scopes outside the registry lock; respect model scopes in validations and overridden field bindings in batches.
+- Match stubs using definition identity, including scoped and ad-hoc Score levels with identical instructions.
+- Snapshot mutable recording data and return independent replay responses.
+- Redact API keys before truncating error details, including messages from JSON responses.
+
+### Performance
+
+- Reuse HTTP connections, retain at most four idle connections, and discard connections after failures, configuration changes, or a fork. Concurrent requests keep separate connections.
+- Index replay requests while preserving the first matching recording and the existing tape format.
+- Cache immutable definition metadata without changing public collection mutability or Ruby Data copying and serialization.
+- Collapse only requested batch keys during pattern matching.
+- Retain compiled definition metadata across garbage collection in a bounded cache.
+- Cache parsed endpoints, avoid sorting replay lookup keys, and reduce allocations in model bindings and ActiveModel validations.
+- Index named Score levels when building stub probabilities.
+
 ## 1.1.0
 
 ### Added

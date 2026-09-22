@@ -7,7 +7,7 @@ module Jev
 
       case definition.type
       when :noul then Noul.parse(answer)
-      when :choice then Choice.parse(answer)
+      when :choice then Choice.parse(answer, definition)
       when :score then Score.parse(answer, definition)
       else
         raise InvalidResponseError, "unknown Jev definition type: #{definition.type.inspect}"
@@ -21,6 +21,8 @@ module Jev
       raise InvalidResponseError, "Jev #{label} is not finite" unless value.finite?
 
       value
+    rescue ArgumentError, TypeError, RangeError
+      raise InvalidResponseError, "Jev #{label} is not a real number"
     end
 
     class Noul
@@ -61,20 +63,35 @@ module Jev
         freeze
       end
 
-      def self.parse(answer)
-        winner = answer["choice"]
-        raise InvalidResponseError, "Jev response is missing a choice" if winner.nil?
-
-        raw = answer["probabilities"]
-        raise InvalidResponseError, "Jev response is missing choice probabilities" unless raw.is_a?(Hash)
-
-        probabilities = raw.to_h { |key, value| [key.to_sym, Result.finite_unit(value, "choice probability")] }
+      def self.parse(answer, definition = nil)
+        winner = choice_key(answer["choice"], definition)
         new(
-          choice: winner.to_sym,
+          choice: winner,
           confidence: Result.finite_unit(answer["confidence"], "choice confidence").clamp(0.0, 1.0),
-          probabilities: probabilities.freeze
+          probabilities: choice_probabilities(answer["probabilities"], definition)
         )
       end
+
+      def self.choice_key(key, definition)
+        unless key.is_a?(String) || key.is_a?(Symbol)
+          raise InvalidResponseError, "Jev response is missing a valid choice"
+        end
+        if definition && !definition.choices.key?(key.to_sym)
+          raise InvalidResponseError, "Jev response has an unknown choice"
+        end
+
+        key.to_sym
+      end
+      private_class_method :choice_key
+
+      def self.choice_probabilities(raw, definition)
+        raise InvalidResponseError, "Jev response is missing choice probabilities" unless raw.is_a?(Hash)
+
+        raw.to_h do |key, value|
+          [choice_key(key, definition), Result.finite_unit(value, "choice probability")]
+        end.freeze
+      end
+      private_class_method :choice_probabilities
 
       def type
         :choice
@@ -114,12 +131,30 @@ module Jev
         raise InvalidResponseError, "Jev response is missing score probabilities" unless raw.is_a?(Hash)
 
         raw.to_h do |key, value|
-          index = Integer(key)
-          [names ? names.fetch(index, index) : index, Result.finite_unit(value, "score probability")]
+          index = level_index(key, names)
+          [names ? names.fetch(index) : index, Result.finite_unit(value, "score probability")]
         end.freeze
-      rescue ArgumentError, TypeError
-        raise InvalidResponseError, "Jev score probabilities are not keyed by level number"
       end
+
+      def self.level_index(key, names)
+        index = parse_index(key)
+        if index.negative? || (names && index >= names.size)
+          raise InvalidResponseError, "Jev score probability has an unknown level"
+        end
+
+        index
+      end
+      private_class_method :level_index
+
+      def self.parse_index(key)
+        return key if key.is_a?(Integer)
+        unless key.is_a?(String) && key.match?(/\A\d+\z/)
+          raise InvalidResponseError, "Jev score probabilities are not keyed by level number"
+        end
+
+        Integer(key, 10)
+      end
+      private_class_method :parse_index
 
       def self.named_level(probabilities, names)
         return unless names
@@ -153,8 +188,12 @@ module Jev
       end
 
       def deconstruct_keys(keys)
-        collapsed = to_h
-        keys ? collapsed.slice(*keys.map(&:to_sym)) : collapsed
+        return to_h unless keys
+
+        keys.each_with_object({}) do |key, values|
+          symbol = key.to_sym
+          values[symbol] = @results.fetch(symbol).collapsed if @results.key?(symbol)
+        end
       end
 
       def type

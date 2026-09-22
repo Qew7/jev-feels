@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "definition_cache"
+
 module Jev
   Definition = Data.define(:name, :type, :instructions, :choices, :levels) do
     def self.build(name:, instructions:, choices: nil, levels: nil)
@@ -18,11 +20,11 @@ module Jev
     end
 
     def level_names
-      levels&.keys
+      compiled_fields[:names]&.dup
     end
 
     def level_descriptions
-      levels&.values
+      compiled_fields[:descriptions]&.dup
     end
 
     def to_question
@@ -81,11 +83,12 @@ module Jev
 
     private
 
+    def compiled_fields
+      DefinitionCache.fetch(self)
+    end
+
     def question_criteria
-      case type
-      when :choice then choices.transform_keys(&:to_s)
-      when :score then level_descriptions
-      end
+      compiled_fields[:criteria]&.dup
     end
   end
 end

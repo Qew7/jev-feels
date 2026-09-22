@@ -77,4 +77,45 @@ RSpec.describe "ActiveModel integration" do
 
     expect(klass.new(body: "a polite review")).to be_valid
   end
+
+  it "reads the current default threshold on every validation" do
+    record = model_class.new(body: "hello")
+    expect(record).to be_valid
+
+    Jev.configuration.threshold = 0.99
+    expect(record).not_to be_valid
+  end
+
+  it "still accepts the original options when validate is called directly" do
+    record = model_class.new(body: "hello")
+    Jev::ActiveModel.validate(record, :body, record.body, predicate: :appropriate, threshold: 0.99)
+
+    expect(record.errors[:body]).to eq(["is not appropriate"])
+  end
+
+  it "validates against the class definition with inherited and global fallbacks" do
+    parent = Class.new do
+      include ActiveModel::Model
+      include Jev::Model
+
+      attr_accessor :body
+
+      feels :body, :urgent, "parent urgent"
+      validates_feeling :body, :urgent
+    end
+    child = Class.new(parent)
+    Jev.define :urgent, "global urgent"
+    transport = FakeTransport.new(noul: 0.9)
+    Jev.configuration.transport = transport
+
+    expect(child.new(body: "hello")).to be_valid
+    expect(transport.calls.last.dig("questions", "feels", "instructions")).to eq("parent urgent")
+    Jev.define child, :urgent, "child urgent"
+    expect(child.new(body: "hello")).to be_valid
+    expect(transport.calls.last.dig("questions", "feels", "instructions")).to eq("child urgent")
+    Jev.reset_definitions!
+    Jev.define :urgent, "global urgent"
+    expect(child.new(body: "hello")).to be_valid
+    expect(transport.calls.last.dig("questions", "feels", "instructions")).to eq("global urgent")
+  end
 end

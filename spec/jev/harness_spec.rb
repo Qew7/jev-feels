@@ -116,4 +116,132 @@ RSpec.describe "Jev.stub / record / replay" do
     expect(tape.to_json).not_to include("sk-test-secret-key")
     expect(tape.to_json).not_to include("Authorization")
   end
+
+  it "distinguishes names with identical instructions for single and batch stubs" do
+    Jev.define :first, "same instructions"
+    Jev.define :second, "same instructions"
+
+    Jev.stub(first: 0.1, second: 0.9) do
+      expect(Jev.feels("hello", :second)).to eq(0.9)
+      expect(Jev.feels("hello", :first)).to eq(0.1)
+      expect(Jev.measure("hello") { |q| q.feels :second }.to_h).to eq(second: true)
+    end
+  end
+
+  it "uses the actual scoped Score level names when instructions collide" do
+    scope = Class.new
+    Jev.define :other, "same instructions", levels: { low: "low", high: "high" }
+    Jev.define scope, :severity, "same instructions", levels: { small: "small", large: "large" }
+
+    Jev.stub(severity: { score: 0.8, probabilities: { small: 0.2, large: 0.8 } }) do
+      result = Jev.measure("hello", scope, :severity)
+      expect(result.probabilities).to eq(small: 0.2, large: 0.8)
+    end
+  end
+
+  it "supports named level probabilities for an ad-hoc Score stub" do
+    Jev.stub(score: { score: 0.8, probabilities: { low: 0.2, high: 0.8 } }) do
+      result = Jev.measure("hello", "severity", levels: { low: "low", high: "high" })
+      expect(result.probabilities).to eq(low: 0.2, high: 0.8)
+    end
+  end
+
+  it "preserves definition identity through nested recording transports" do
+    Jev.define :first, "same instructions"
+    Jev.define :second, "same instructions"
+    tape = nil
+    Jev.stub(second: 0.9) do
+      tape = Jev.record { Jev.record { expect(Jev.feels("hello", :second)).to eq(0.9) } }
+    end
+
+    Jev.replay(tape) { expect(Jev.feels("hello", :second)).to eq(0.9) }
+  end
+
+  it "takes an independent snapshot of request and response strings" do
+    text = +"original"
+    winner = +"billing"
+    response = {
+      "answers" => {
+        "support_team" => { "choice" => winner, "confidence" => 1.0, "probabilities" => { "billing" => 1.0 } }
+      }
+    }
+    Jev.configuration.transport = ->(_) { response }
+    tape = Jev.record { Jev.decide(text, :support_team) }
+    text.replace("changed")
+    winner.replace("technical")
+    response.clear
+
+    [tape, tape.to_json].each do |recording|
+      Jev.replay(recording) { expect(Jev.decide("original", :support_team)).to eq(:billing) }
+      Jev.replay(recording) { expect { Jev.decide("changed", :support_team) }.to raise_error(Jev::ReplayError) }
+    end
+  end
+
+  it "matches requests in any replay order and preserves the first duplicate answer" do
+    count = 0
+    Jev.configuration.transport = lambda do |_|
+      count += 1
+      { "answers" => { "feels" => { "noul" => count / 10.0 } } }
+    end
+    tape = Jev.record do
+      Jev.feels("one", :urgent)
+      Jev.feels("two", :urgent)
+      Jev.feels("one", :urgent)
+    end
+
+    [tape, tape.to_json].each do |recording|
+      Jev.replay(recording) do
+        expect(Jev.feels("two", :urgent)).to eq(0.2)
+        expect(Jev.feels("one", :urgent)).to eq(0.1)
+        expect(Jev.feels("one", :urgent)).to eq(0.1)
+      end
+    end
+  end
+
+  it "matches equivalent batches independently of question insertion order" do
+    Jev.configuration.transport = lambda do |_|
+      { "answers" => { "urgent" => { "noul" => 0.9 }, "spam" => { "noul" => 0.1 } } }
+    end
+    Jev.define :spam, "spam"
+    tape = Jev.record do
+      Jev.measure("hello") do |q|
+        q.feels :urgent
+        q.feels :spam
+      end
+    end
+
+    request = JSON.parse(tape.to_json).fetch("entries").first.fetch("request")
+    expect(request.keys).to eq(%w[model questions state])
+    expect(request.fetch("questions").keys).to eq(%w[spam urgent])
+
+    Jev.replay(tape.to_json) do
+      result = Jev.measure("hello") do |q|
+        q.feels :spam
+        q.feels :urgent
+      end
+      expect(result.to_h).to eq(spam: false, urgent: true)
+    end
+  end
+
+  it "does not expose the stored replay response to mutation" do
+    transport = FakeTransport.new(noul: 0.7)
+    Jev.configuration.transport = transport
+    tape = Jev.record { Jev.feels("hello", :urgent) }
+    payload = transport.calls.first
+    tape.lookup(payload)["answers"].clear
+
+    Jev.replay(tape) { expect(Jev.feels("hello", :urgent)).to eq(0.7) }
+  end
+
+  it "rejects malformed tape entries before replay" do
+    expect { Jev.replay({ "entries" => [nil] }) { Jev.feels("hello", :urgent) } }
+      .to raise_error(ArgumentError, /invalid entry/)
+  end
+
+  it "restores nested stub transports when a block raises" do
+    Jev.stub(urgent: 0.2) do
+      expect { Jev.stub(urgent: 0.9) { raise "failed" } }.to raise_error("failed")
+      expect(Jev.feels("hello", :urgent)).to eq(0.2)
+    end
+  end
 end

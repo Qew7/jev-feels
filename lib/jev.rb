@@ -24,6 +24,7 @@ module Jev
     end
 
     def reset_configuration!
+      @configuration&.send(:close_transport)
       @configuration = Configuration.new
     end
 
@@ -52,7 +53,7 @@ module Jev
     end
 
     def feels(text, scope_or_predicate, predicate = nil)
-      measure_one(text, scope_or_predicate, predicate, id: Client::QUESTION_ID).probability
+      typed_measure(:noul, text, scope_or_predicate, predicate, id: Client::QUESTION_ID).probability
     end
 
     def feels?(text, scope_or_predicate, predicate = nil, **opts)
@@ -204,21 +205,22 @@ module Jev
     def measure_one(text, scope_or_predicate, predicate, id: nil, **)
       scope, predicate = unpack_predicate(scope_or_predicate, predicate)
       definition = resolve_definition(predicate, scope: scope, **)
+      ask_definition(text, predicate, definition, id)
+    end
+
+    def typed_measure(type, text, scope_or_predicate, predicate, id: nil, **)
+      scope, predicate = unpack_predicate(scope_or_predicate, predicate)
+      definition = resolve_definition(predicate, scope: scope, **)
+      unless definition.type == type
+        raise ArgumentError, "#{predicate.inspect} is a #{definition.type} definition, not a #{type}"
+      end
+
+      ask_definition(text, predicate, definition, id)
+    end
+
+    def ask_definition(text, predicate, definition, id)
       question_id = id || (predicate.is_a?(Symbol) ? predicate.to_s : definition.type.to_s)
       Client.new(configuration).ask(coerce_text(text), { question_id => definition }).fetch(question_id)
-    end
-
-    def typed_measure(type, text, scope_or_predicate, predicate, **)
-      result = measure_one(text, scope_or_predicate, predicate, **)
-      return result if result.type == type
-
-      label = predicate_label(scope_or_predicate, predicate)
-      raise ArgumentError, "#{label} is a #{result.type} definition, not a #{type}"
-    end
-
-    def predicate_label(scope_or_predicate, predicate)
-      (_scope, name) = unpack_predicate(scope_or_predicate, predicate)
-      name.inspect
     end
 
     def measure_batch(text, scope, &)

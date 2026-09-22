@@ -18,10 +18,11 @@ module Jev
 
     def fetch(name, scope: nil, fallback: true, inherit: true)
       key = name.to_sym
+      keys = lookup_keys(scope, inherit: inherit) unless scope.nil?
       @mutex.synchronize do
         return @definitions.dig(nil, key) if scope.nil?
 
-        lookup_keys(scope, inherit: inherit).each do |scope_key|
+        keys.each do |scope_key|
           found = @definitions.dig(scope_key, key)
           return found if found
         end

@@ -9,7 +9,15 @@ module Jev
     module_function
 
     def current_transport(configuration)
-      Thread.current[THREAD_KEY] || configuration.transport || Transport.new(configuration)
+      Thread.current[THREAD_KEY] || configuration.transport || configuration.send(:default_transport)
+    end
+
+    def dispatch(transport, payload, definitions)
+      if transport.is_a?(StubTransport) || transport.is_a?(RecordingTransport)
+        transport.call(payload, definitions)
+      else
+        transport.call(payload)
+      end
     end
 
     def stub(answers, &)
@@ -45,19 +53,24 @@ module Jev
 
     class Tape
       def initialize(entries = [])
-        @entries = entries
+        @entries = []
+        @index = {}
+        entries.each { |entry| record(entry.fetch("request"), entry.fetch("response")) }
       end
 
       def record(payload, response)
-        @entries << { "request" => canonical(payload), "response" => canonical(response) }
+        request = canonical(payload)
+        entry = { "request" => request, "response" => canonical(response) }.freeze
+        @entries << entry
+        @index[request] ||= entry
       end
 
       def lookup(payload)
-        request = canonical(payload)
-        entry = @entries.find { |item| item["request"] == request }
+        request = canonical(payload, sort: false)
+        entry = @index[request]
         raise ReplayError, replay_message(payload) unless entry
 
-        entry["response"]
+        copy(entry["response"])
       end
 
       def to_json(*)
@@ -71,19 +84,43 @@ module Jev
         entries = payload["entries"]
         raise ArgumentError, "tape is missing entries" unless entries.is_a?(Array)
 
+        raise ArgumentError, "tape contains an invalid entry" unless entries.all? { |entry| valid_entry?(entry) }
+
         new(entries)
       end
 
+      def self.valid_entry?(entry)
+        entry.is_a?(Hash) && entry["request"].is_a?(Hash) && entry["response"].is_a?(Hash)
+      end
+      private_class_method :valid_entry?
+
       private
 
-      def canonical(value)
+      def canonical(value, sort: true)
         case value
         when Hash
-          value.to_h.transform_keys(&:to_s).sort.to_h.transform_values { |item| canonical(item) }
+          canonical_hash(value, sort: sort)
         when Array
-          value.map { |item| canonical(item) }
+          value.map { |item| canonical(item, sort: sort) }.freeze
+        when String
+          value.dup.freeze
         else
           value
+        end
+      end
+
+      def canonical_hash(value, sort:)
+        pairs = value.transform_keys(&:to_s)
+        pairs = pairs.sort.to_h if sort
+        pairs.transform_values { |item| canonical(item, sort: sort) }.freeze
+      end
+
+      def copy(value)
+        case value
+        when Hash then value.transform_values { |item| copy(item) }
+        when Array then value.map { |item| copy(item) }
+        when String then value.dup
+        else value
         end
       end
 
@@ -99,8 +136,8 @@ module Jev
         @tape = tape
       end
 
-      def call(payload)
-        response = @inner.call(payload)
+      def call(payload, definitions = {})
+        response = Harness.dispatch(@inner, payload, definitions)
         @tape.record(payload, response)
         response
       end
@@ -121,26 +158,31 @@ module Jev
         @answers = answers.to_h.transform_keys { |key| key.is_a?(String) ? key.to_sym : key }
       end
 
-      def call(payload)
+      def call(payload, definitions = {})
         questions = payload.fetch("questions")
         {
-          "answers" => questions.to_h { |id, question| [id, answer_for(id, question)] }
+          "answers" => questions.to_h { |id, question| [id, answer_for(id, question, definitions[id])] }
         }
       end
 
       private
 
-      def answer_for(id, question)
-        stub = @answers[id.to_sym] || @answers[Jev.send(:name_for_instructions, question["instructions"])]
+      def answer_for(id, question, definition)
+        stub = find_stub(id, definition)
         raise ArgumentError, "unstubbed Jev question: #{id}" if stub.nil?
 
         case question["type"]
         when "noul" then noul_answer(stub)
         when "choice" then choice_answer(stub, question)
-        when "score" then score_answer(stub, question)
+        when "score" then score_answer(stub, question, definition)
         else
           raise ArgumentError, "unstubbed Jev question: #{id}"
         end
+      end
+
+      def find_stub(id, definition)
+        name = definition&.name || id.to_sym
+        @answers.key?(name) ? @answers[name] : @answers[id.to_sym]
       end
 
       def noul_answer(stub)
@@ -165,14 +207,14 @@ module Jev
         keys.to_h { |key| [key, key == winner ? 1.0 : 0.0] }
       end
 
-      def score_answer(stub, question)
+      def score_answer(stub, question, definition)
         score, confidence, probabilities = unpack_stub(stub, :score) { stub }
         probabilities ||= default_score_probabilities(question["criteria"] || [], score)
         {
           "type" => "score",
           "score" => Float(score),
           "confidence" => Float(confidence),
-          "probabilities" => score_probability_hash(probabilities, question)
+          "probabilities" => score_probability_hash(probabilities, definition)
         }
       end
 
@@ -196,19 +238,20 @@ module Jev
         size.times.to_h { |index| [index.to_s, index == nearest ? 1.0 : 0.0] }
       end
 
-      def score_probability_hash(probabilities, question)
-        names = Jev.send(:level_names_for, question["instructions"])
+      def score_probability_hash(probabilities, definition)
+        names = definition&.level_names
+        indexes = nil
         probabilities.to_h do |key, value|
-          index = score_index(key, names)
+          index = score_index(key) { indexes ||= names&.each_with_index&.to_h }
           [index.to_s, Float(value)]
         end
       end
 
-      def score_index(key, names)
+      def score_index(key)
         return key if key.is_a?(Integer)
         return Integer(key) if key.is_a?(String) && key.match?(/\A\d+\z/)
 
-        names&.index(key.to_sym) || Integer(key)
+        yield&.[](key.to_sym) || Integer(key)
       end
     end
   end

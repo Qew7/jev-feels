@@ -10,7 +10,7 @@ module Jev
     end
 
     def ask(text, questions)
-      body = transport.call(payload(text, questions))
+      body = Harness.dispatch(transport, payload(text, questions), questions)
       parse(body, questions)
     end
 

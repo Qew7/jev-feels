@@ -41,13 +41,16 @@ module Jev
       end
 
       def jev_bound_fields
-        fields = []
+        ancestors = []
         current = self
         while current && current != Object
-          fields.concat(Array(current.instance_variable_get(:@jev_feels_attributes)&.values))
+          parent_bindings = current.instance_variable_get(:@jev_feels_attributes)
+          ancestors << parent_bindings if parent_bindings
           current = current.superclass
         end
-        fields.uniq
+        bindings = {}
+        ancestors.reverse_each { |parent_bindings| bindings.merge!(parent_bindings) }
+        bindings.values.uniq
       end
 
       private

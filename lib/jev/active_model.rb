@@ -9,6 +9,7 @@ module Jev
     module ClassMethods
       def validates_feeling(attribute, predicate, message: nil, threshold: nil, at_least: nil, **options)
         feeling = { predicate: predicate, message: message, threshold: threshold, at_least: at_least }
+        feeling[:decision_options] = feeling.slice(:threshold, :at_least).compact.freeze
         validates_each(attribute, **options) do |record, attr, value|
           Jev::ActiveModel.validate(record, attr, value, feeling)
         end
@@ -17,8 +18,8 @@ module Jev
 
     def self.validate(record, attr, value, feeling)
       text = value.is_a?(String) ? value : value.to_s
-      kwargs = feeling.slice(:threshold, :at_least).compact
-      return if Jev.feels?(text, feeling[:predicate], **kwargs) == true
+      kwargs = feeling[:decision_options] || feeling.slice(:threshold, :at_least).compact
+      return if Jev.feels?(text, record.class, feeling[:predicate], **kwargs) == true
 
       record.errors.add(attr, feeling[:message] || "is not #{feeling[:predicate]}")
     end

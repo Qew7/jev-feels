@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "tmpdir"
+
 RSpec.describe "Jev definitions" do
   it "stores a definition" do
     Jev.define :urgent, "Requires immediate attention or action"
@@ -108,5 +110,24 @@ RSpec.describe "Jev definitions" do
     Jev.define comment, :urgent, "Legal takedown request"
 
     expect(Jev.definition(moderated, :urgent)).to be_nil
+  end
+
+  it "allows an autoloaded scope to register definitions during lookup" do
+    namespace = Module.new
+    stub_const("JevAutoloadRegression", namespace)
+    Dir.mktmpdir("jev-autoload") do |dir|
+      path = File.join(dir, "model.rb")
+      File.write(path, <<~SOURCE)
+        class JevAutoloadRegression::Model
+          include Jev::Model
+          feels :body, :urgent, "scoped urgent"
+        end
+      SOURCE
+      namespace.autoload(:Model, path)
+      Jev.configuration.transport = FakeTransport.new(noul: 0.9)
+
+      expect(Jev.feels("hello", "JevAutoloadRegression::Model", :urgent)).to eq(0.9)
+      expect(Jev.configuration.transport.calls.last.dig("questions", "feels", "instructions")).to eq("scoped urgent")
+    end
   end
 end

@@ -265,4 +265,57 @@ RSpec.describe "Jev primitives" do
       expect { Jev.decide("x", :missing) }.to raise_error(Jev::UndefinedDefinition)
     end
   end
+
+  it "checks single-question types before invoking the transport" do
+    Jev.define :urgent, "urgent"
+    Jev.define :team, "team", choices: { a: "a" }
+    Jev.define :severity, "severity", levels: { low: "low", high: "high" }
+    transport = instance_double(Jev::Transport)
+    Jev.configuration.transport = transport
+    expect(transport).not_to receive(:call)
+
+    expect { Jev.decide("hello", :urgent) }.to raise_error(ArgumentError, /not a choice/)
+    expect { Jev.score("hello", :team) }.to raise_error(ArgumentError, /not a score/)
+    expect { Jev.feels("hello", :severity) }.to raise_error(ArgumentError, /not a noul/)
+    expect { Jev.feels?("hello", :team) }.to raise_error(ArgumentError, /not a noul/)
+  end
+
+  it "preserves mutable public definition views without exposing cached criteria" do
+    choice = Jev.define :team, "team", choices: { billing: "refunds" }
+    score = Jev.define :severity, "severity", levels: { low: "minor", high: "major" }
+    choice.to_question["criteria"].clear
+    choice.to_question["type"].replace("changed")
+    score.to_question["criteria"].clear
+    score.level_names.clear
+    score.level_descriptions.clear
+
+    expect(choice.to_question).to eq("type" => "choice", "instructions" => "team",
+                                     "criteria" => { "billing" => "refunds" })
+    expect(score.to_question["criteria"]).to eq(%w[minor major])
+    expect(score.level_names).to eq(%i[low high])
+    expect(score.level_descriptions).to eq(%w[minor major])
+  end
+
+  it "preserves Data copying and Marshal round-trips after warming the definition cache" do
+    definition = Jev.define :severity, "severity", levels: { low: "minor", high: "major" }
+    definition.to_question
+    copied = definition.with(levels: { first: "one", second: "two" })
+
+    expect(copied.level_names).to eq(%i[first second])
+    expect(copied.to_question["criteria"]).to eq(%w[one two])
+    restored = Marshal.load(Marshal.dump(definition))
+    expect(restored).to eq(definition)
+    expect(restored.to_question).to eq(definition.to_question)
+  end
+
+  it "keeps directly constructed definitions responsive to mutable criteria" do
+    levels = { low: "minor", high: "major" }
+    definition = Jev::Definition.new(name: :severity, type: :score, instructions: "severity", choices: nil,
+                                     levels: levels)
+    definition.to_question
+    levels[:critical] = "critical"
+
+    expect(definition.level_names).to eq(%i[low high critical])
+    expect(definition.to_question["criteria"]).to eq(%w[minor major critical])
+  end
 end

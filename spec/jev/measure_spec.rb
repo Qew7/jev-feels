@@ -123,4 +123,22 @@ RSpec.describe "Jev.measure" do
 
     expect(matched).to eq(:escalate)
   end
+
+  it "checks batch question types before invoking the transport" do
+    Jev.define :urgent, "urgent"
+    Jev.define :team, "team", choices: { a: "a" }
+    transport = instance_double(Jev::Transport)
+    Jev.configuration.transport = transport
+    expect(transport).not_to receive(:call)
+
+    expect { Jev.measure("hello") { |q| q.decide :urgent } }.to raise_error(ArgumentError, /not a choice/)
+    expect { Jev.measure("hello") { |q| q.feels :team } }.to raise_error(ArgumentError, /not a noul/)
+    expect { Jev.measure("hello") { |q| q.score :urgent } }.to raise_error(ArgumentError, /not a score/)
+  end
+
+  it "does not expose internal type checking options through the public API" do
+    Jev.define :urgent, "urgent"
+
+    expect { Jev.measure("hello", :urgent, expected_type: :noul) }.to raise_error(ArgumentError, /unknown keyword/)
+  end
 end

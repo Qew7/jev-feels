@@ -4,6 +4,7 @@ require "json"
 require "net/http"
 require "openssl"
 require "uri"
+require_relative "http_pool"
 
 module Jev
   class Transport
@@ -11,12 +12,11 @@ module Jev
 
     def initialize(configuration)
       @configuration = configuration
+      @pool = HTTPPool.new
     end
 
     def call(payload)
       handle_response(post(payload))
-    rescue Error
-      raise
     rescue Timeout::Error
       raise RequestError, "Jev request timed out"
     rescue SystemCallError, SocketError, IOError, OpenSSL::SSL::SSLError => e
@@ -25,12 +25,18 @@ module Jev
 
     private
 
+    def close
+      @pool.close
+    end
+
     def post(payload)
       uri = endpoint
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = uri.scheme == "https"
-      apply_timeouts(http)
-      http.request(build_request(uri, payload))
+      request = build_request(uri, payload)
+      @pool.with_connection(uri) do |http|
+        apply_timeouts(http)
+        http.start unless http.started?
+        http.request(request)
+      end
     end
 
     def apply_timeouts(http)
@@ -59,8 +65,13 @@ module Jev
 
     def endpoint
       base = @configuration.base_url
-      base = "#{base}/" unless base.end_with?("/")
-      URI.join(base, PATH)
+      cached = @endpoint_cache
+      return cached.last if cached && cached.first == base
+
+      base = base.dup.freeze
+      uri = URI.join(base.end_with?("/") ? base : "#{base}/", PATH)
+      @endpoint_cache = [base, uri].freeze
+      uri
     end
 
     def handle_response(response)
@@ -81,10 +92,10 @@ module Jev
     end
 
     def raise_http_error(code, raw)
+      raise AuthenticationError, "Jev authentication failed" if code == 401
+
       detail = error_detail(raw)
       case code
-      when 401
-        raise AuthenticationError, "Jev authentication failed"
       when 429
         raise RateLimitError, join_detail("Jev rate limit exceeded", detail)
       else
@@ -96,16 +107,18 @@ module Jev
       text = extract_error_message(raw)
       return if text.nil? || text.empty?
 
-      redact(text)
+      redact(text)[0, 200]
     end
 
     def extract_error_message(raw)
       parsed = JSON.parse(raw)
+      return raw.strip unless parsed.is_a?(Hash)
+
       message = parsed.values_at("error", "message", "detail").compact.first
       message = message["message"] if message.is_a?(Hash)
       message.to_s
     rescue JSON::ParserError
-      raw.strip[0, 200]
+      raw.strip
     end
 
     def join_detail(prefix, detail)

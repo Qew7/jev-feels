@@ -187,4 +187,52 @@ RSpec.describe Jev::Model do
     expect(batch.to_h).to eq(urgent: true, support_team: :billing, severity: 2.1)
     expect(transport.calls.last["state"]).to eq("charged twice")
   end
+
+  it "uses the effective inherited field bindings for a batch" do
+    parent = Class.new do
+      include Jev::Model
+
+      attr_accessor :body, :subject
+
+      feels :body, :urgent, "urgent"
+    end
+    child = Class.new(parent) { feels :subject, :urgent }
+    row = child.new
+    row.body = "wrong field"
+    row.subject = "right field"
+    transport = ScriptedTransport.new { |_| { "answers" => { "urgent" => { "noul" => 0.9 } } } }
+    Jev.configuration.transport = transport
+
+    expect(row.measure { |q| q.feels :urgent }.to_h).to eq(urgent: true)
+    expect(transport.calls.last["state"]).to eq("right field")
+    expect(parent.jev_bound_fields).to eq([:body])
+  end
+
+  it "still rejects batches with distinct effective fields" do
+    parent = Class.new do
+      include Jev::Model
+
+      feels :body, :urgent, "urgent"
+      feels :body, :spam, "spam"
+    end
+    child = Class.new(parent) { feels :subject, :urgent }
+
+    expect { child.new.measure { |q| q.feels :urgent } }.to raise_error(ArgumentError, /needs one field/)
+  end
+
+  it "preserves ancestor declaration order, child overrides and later parent bindings" do
+    parent = model_class do
+      feels :body, :urgent
+      feels :subject, :spam
+    end
+    child = model_class(parent: parent) do
+      feels :title, :urgent
+      feels :body, :angry
+    end
+
+    expect(child.jev_bound_fields).to eq(%i[title subject body])
+    parent.feels :summary, :brief
+    expect(child.jev_bound_fields).to eq(%i[title subject summary body])
+    expect(parent.jev_bound_fields).to eq(%i[body subject summary])
+  end
 end
