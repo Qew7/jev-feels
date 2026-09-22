@@ -85,7 +85,7 @@ Jev.define :urgent, "Requires immediate attention or action"
 Jev.define :spam, "Unsolicited or unwanted promotional content"
 ```
 
-A decision (`decide`):
+A decision (`decide`), with up to 255 choices:
 
 ```ruby
 Jev.define :support_team,
@@ -98,7 +98,7 @@ Jev.define :support_team,
   }
 ```
 
-A scale (`score`). Hash order is low to high:
+A scale (`score`), with 2 to 10 levels. Hash order is low to high:
 
 ```ruby
 Jev.define :severity,
@@ -297,6 +297,8 @@ end
 
 A full `decide` / `score` stub is a hash with `choice` or `score`, plus `confidence` and `probabilities`. To own the HTTP shape, set `config.transport`.
 
+When Score probabilities are omitted, the stub distributes probability between adjacent levels so their weighted mean equals the score. The score must be within the declared scale (`0..levels.size - 1`); otherwise it raises `ArgumentError`. Explicit probabilities and confidence are preserved; confidence defaults to `1.0`.
+
 Record real answers and replay them later. Replay never uses the network. The tape matches the request (state and questions), not a queue index. API keys and Authorization headers are not stored.
 
 ```ruby
@@ -330,7 +332,7 @@ end
 
 ## Errors
 
-All errors inherit from `Jev::Error`. HTTP failures are wrapped; the original exception is available as `cause`. API keys are redacted from messages.
+All errors inherit from `Jev::Error`. HTTP failures are wrapped; the original exception is available as `cause`.
 
 | Error                       | When                                          |
 | --------------------------- | --------------------------------------------- |

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.2
+
+### Fixed
+
+- Enforce a maximum of 255 Choice options and 10 Score levels for named and ad-hoc questions.
+- Generate Score stub probabilities between adjacent levels so their weighted mean matches the supplied score; reject out-of-range scores when generating probabilities.
+- Preserve explicitly supplied stub probabilities and confidence.
+
+### Changed
+
+- Simplify response parsing to JSON number and string key types, and require a definition when parsing Choice answers.
+- Read HTTP error details from `detail.message`; remove error-message redaction and truncation.
+
 ## 1.1.1
 
 ### Fixed

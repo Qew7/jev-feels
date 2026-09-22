@@ -233,9 +233,13 @@ module Jev
       end
 
       def default_score_probabilities(criteria, score)
-        size = [criteria.size, 1].max
-        nearest = Float(score).round.clamp(0, size - 1)
-        size.times.to_h { |index| [index.to_s, index == nearest ? 1.0 : 0.0] }
+        score = Float(score)
+        maximum = criteria.size - 1
+        unless score.finite? && score.between?(0, maximum)
+          raise ArgumentError, "stub score must be between 0 and #{maximum}"
+        end
+
+        criteria.size.times.to_h { |index| [index.to_s, [1.0 - (index - score).abs, 0.0].max] }
       end
 
       def score_probability_hash(probabilities, definition)

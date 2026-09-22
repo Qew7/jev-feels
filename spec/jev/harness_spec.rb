@@ -12,10 +12,10 @@ RSpec.describe "Jev.stub / record / replay" do
   it "stubs named answers without a network call" do
     Jev.configure { |config| config.api_key = "sk-test-secret-key" }
 
-    Jev.stub(urgent: 0.95, support_team: :billing, severity: 2.4) do
+    Jev.stub(urgent: 0.95, support_team: :billing, severity: 0.8) do
       expect(Jev.feels?("the site is down", :urgent)).to be true
       expect(Jev.decide("charged twice", :support_team)).to eq(:billing)
-      expect(Jev.score("cannot pay", :severity)).to eq(2.4)
+      expect(Jev.score("cannot pay", :severity)).to eq(0.8)
     end
 
     expect(WebMock).not_to have_requested(:post, endpoint)
@@ -43,6 +43,40 @@ RSpec.describe "Jev.stub / record / replay" do
       expect(result[:support_team].confidence).to eq(0.42)
       expect(result[:severity].score).to eq(1.1)
       expect(result[:severity].probabilities[:blocking]).to eq(0.8)
+    end
+  end
+
+  [0.0, 0.8, 1.0, 1.25, 2.0].each do |score|
+    it "generates a normalized distribution with mean #{score}" do
+      Jev.define :scale, "Rate", levels: { low: "low", middle: "middle", high: "high" }
+      Jev.stub(scale: score) do
+        result = Jev.measure("hello", :scale)
+        weights = result.probabilities.values
+
+        expect(result.score).to eq(score)
+        expect(weights).to all(be_between(0.0, 1.0))
+        expect(weights.sum).to be_within(1e-12).of(1.0)
+        expect(weights.each_with_index.sum { |weight, index| weight * index }).to be_within(1e-12).of(score)
+        expect(weights.count(&:positive?)).to be <= 2
+      end
+    end
+  end
+
+  it "interpolates a hash stub without probabilities and preserves explicit confidence" do
+    Jev.stub(severity: { score: 0.8, confidence: 0.3 }) do
+      result = Jev.measure("hello", :severity)
+
+      expect(result.probabilities[:cosmetic]).to be_within(1e-12).of(0.2)
+      expect(result.probabilities[:blocking]).to be_within(1e-12).of(0.8)
+      expect(result.confidence).to eq(0.3)
+    end
+  end
+
+  [-0.1, 1.1, Float::NAN, Float::INFINITY].each do |score|
+    it "rejects an impossible generated distribution for score #{score}" do
+      Jev.stub(severity: score) do
+        expect { Jev.score("hello", :severity) }.to raise_error(ArgumentError, "stub score must be between 0 and 1")
+      end
     end
   end
 

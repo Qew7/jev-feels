@@ -8,6 +8,25 @@ RSpec.describe "Jev primitives" do
   end
 
   describe "Jev.define" do
+    { choices: 255, levels: 10 }.each do |option, maximum|
+      it "accepts exactly #{maximum} #{option}" do
+        entries = maximum.times.to_h { |index| ["item_#{index}", "Description #{index}"] }
+        definition = Jev.define(:limit, "Question", **{ option => entries })
+
+        expect(definition.to_question.fetch("criteria").size).to eq(maximum)
+      end
+
+      it "rejects #{option} above the limit for named and ad-hoc questions before transport" do
+        entries = (maximum + 1).times.to_h { |index| ["item_#{index}", "Description #{index}"] }
+        Jev.configuration.transport = ->(_) { raise "transport must not be called" }
+        message = "#{option} must have at most #{maximum} entries"
+
+        expect { Jev.define(:limit, "Question", **{ option => entries }) }.to raise_error(ArgumentError, message)
+        expect { Jev.measure("text", "Question", **{ option => entries }) }.to raise_error(ArgumentError, message)
+        expect(Jev.definition(:limit)).to be_nil
+      end
+    end
+
     it "keeps a plain Noul as a string" do
       Jev.define :urgent, "Requires immediate attention or action"
 

@@ -45,15 +45,20 @@ RSpec.describe Jev::Transport do
   end
 
   it "raises on authentication failure" do
-    stub_systemone(status: 401, body: JSON.generate("error" => "invalid key sk-test-secret-key"))
+    stub_systemone(
+      status: 401,
+      body: JSON.generate(
+        "detail" => { "error_type" => "authentication_error", "message" => "Cannot authenticate with the server." }
+      )
+    )
 
     expect { transport.call(payload) }.to raise_error(Jev::AuthenticationError, "Jev authentication failed")
   end
 
   it "raises on rate limit" do
-    stub_systemone(status: 429, body: JSON.generate("error" => "slow down"))
+    stub_systemone(status: 429, body: JSON.generate("detail" => { "message" => "slow down" }))
 
-    expect { transport.call(payload) }.to raise_error(Jev::RateLimitError, /rate limit/)
+    expect { transport.call(payload) }.to raise_error(Jev::RateLimitError, "Jev rate limit exceeded: slow down")
   end
 
   it "wraps a network failure" do
@@ -72,55 +77,9 @@ RSpec.describe Jev::Transport do
     end
   end
 
-  it "never puts the API key in error messages" do
-    stub_systemone(status: 422, body: JSON.generate("error" => "rejected key sk-test-secret-key"))
-
-    expect { transport.call(payload) }.to raise_error(Jev::RequestError) do |error|
-      expect(error.message).not_to include("sk-test-secret-key")
-      expect(error.message).to include("[FILTERED]")
-      expect(error.message).not_to include(config.api_key)
-    end
-  end
-
   it "raises when the API key is missing" do
     config.api_key = nil
 
     expect { transport.call(payload) }.to raise_error(Jev::ConfigurationError, "Jev API key is missing")
-  end
-
-  ["null", "[]", '"upstream error"', "42", "not json"].each do |body|
-    { 401 => Jev::AuthenticationError, 429 => Jev::RateLimitError, 502 => Jev::RequestError }.each do |status, error|
-      it "maps HTTP #{status} with #{body.inspect} to #{error}" do
-        stub_systemone(status: status, body: body)
-
-        expect { transport.call(payload) }.to raise_error(error)
-      end
-    end
-  end
-
-  it "redacts keys in non-object JSON error bodies" do
-    stub_systemone(status: 500, body: JSON.generate([config.api_key]))
-
-    expect { transport.call(payload) }.to raise_error(Jev::RequestError) do |error|
-      expect(error.message).to include("[FILTERED]")
-      expect(error.message).not_to include(config.api_key)
-    end
-  end
-
-  it "redacts the whole key before truncating a plain text error" do
-    stub_systemone(status: 500, body: ("x" * 195) + config.api_key)
-
-    expect { transport.call(payload) }.to raise_error(Jev::RequestError) do |error|
-      expect(error.message).not_to include("sk-te")
-      expect(error.message).to end_with("[FILT")
-    end
-  end
-
-  it "bounds JSON error details after redacting the key" do
-    stub_systemone(status: 500, body: JSON.generate("error" => "#{config.api_key}#{'x' * 500}"))
-
-    expect { transport.call(payload) }.to raise_error(Jev::RequestError) do |error|
-      expect(error.message).to eq("Jev request failed with HTTP 500: [FILTERED]#{'x' * 190}")
-    end
   end
 end

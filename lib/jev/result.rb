@@ -15,14 +15,9 @@ module Jev
     end
 
     def self.finite_unit(value, label)
-      raise InvalidResponseError, "Jev response is missing #{label}" unless value.is_a?(Numeric)
+      raise InvalidResponseError, "Jev response is missing #{label}" unless value.is_a?(Integer) || value.is_a?(Float)
 
-      value = Float(value)
-      raise InvalidResponseError, "Jev #{label} is not finite" unless value.finite?
-
-      value
-    rescue ArgumentError, TypeError, RangeError
-      raise InvalidResponseError, "Jev #{label} is not a real number"
+      Float(value)
     end
 
     class Noul
@@ -35,13 +30,12 @@ module Jev
 
       def self.parse(answer)
         noul = answer["noul"]
-        raise InvalidResponseError, "Jev response is missing a noul probability" unless noul.is_a?(Numeric)
-
-        noul = Float(noul)
-        raise InvalidResponseError, "Jev noul probability is not finite" unless noul.finite?
+        unless noul.is_a?(Integer) || noul.is_a?(Float)
+          raise InvalidResponseError, "Jev response is missing a noul probability"
+        end
 
         # ponytail: clamp out-of-range noul; raise if Jev starts returning uncalibrated values
-        new(probability: noul.clamp(0.0, 1.0))
+        new(probability: Float(noul).clamp(0.0, 1.0))
       end
 
       def type
@@ -63,7 +57,7 @@ module Jev
         freeze
       end
 
-      def self.parse(answer, definition = nil)
+      def self.parse(answer, definition)
         winner = choice_key(answer["choice"], definition)
         new(
           choice: winner,
@@ -73,12 +67,8 @@ module Jev
       end
 
       def self.choice_key(key, definition)
-        unless key.is_a?(String) || key.is_a?(Symbol)
-          raise InvalidResponseError, "Jev response is missing a valid choice"
-        end
-        if definition && !definition.choices.key?(key.to_sym)
-          raise InvalidResponseError, "Jev response has an unknown choice"
-        end
+        raise InvalidResponseError, "Jev response is missing a valid choice" unless key.is_a?(String)
+        raise InvalidResponseError, "Jev response has an unknown choice" unless definition.choices.key?(key.to_sym)
 
         key.to_sym
       end
@@ -132,29 +122,21 @@ module Jev
 
         raw.to_h do |key, value|
           index = level_index(key, names)
-          [names ? names.fetch(index) : index, Result.finite_unit(value, "score probability")]
+          [names.fetch(index), Result.finite_unit(value, "score probability")]
         end.freeze
       end
 
       def self.level_index(key, names)
-        index = parse_index(key)
-        if index.negative? || (names && index >= names.size)
-          raise InvalidResponseError, "Jev score probability has an unknown level"
-        end
-
-        index
-      end
-      private_class_method :level_index
-
-      def self.parse_index(key)
-        return key if key.is_a?(Integer)
         unless key.is_a?(String) && key.match?(/\A\d+\z/)
           raise InvalidResponseError, "Jev score probabilities are not keyed by level number"
         end
 
-        Integer(key, 10)
+        index = Integer(key, 10)
+        raise InvalidResponseError, "Jev score probability has an unknown level" if index >= names.size
+
+        index
       end
-      private_class_method :parse_index
+      private_class_method :level_index
 
       def self.named_level(probabilities, names)
         return unless names

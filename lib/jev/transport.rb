@@ -20,7 +20,7 @@ module Jev
     rescue Timeout::Error
       raise RequestError, "Jev request timed out"
     rescue SystemCallError, SocketError, IOError, OpenSSL::SSL::SSLError => e
-      raise RequestError, redact("Jev request failed: #{e.message}")
+      raise RequestError, "Jev request failed: #{e.message}"
     end
 
     private
@@ -104,32 +104,20 @@ module Jev
     end
 
     def error_detail(raw)
-      text = extract_error_message(raw)
-      return if text.nil? || text.empty?
-
-      redact(text)[0, 200]
-    end
-
-    def extract_error_message(raw)
       parsed = JSON.parse(raw)
-      return raw.strip unless parsed.is_a?(Hash)
+      return unless parsed.is_a?(Hash)
 
-      message = parsed.values_at("error", "message", "detail").compact.first
-      message = message["message"] if message.is_a?(Hash)
-      message.to_s
+      detail = parsed["detail"]
+      return unless detail.is_a?(Hash)
+
+      message = detail["message"]
+      message if message.is_a?(String) && !message.empty?
     rescue JSON::ParserError
-      raw.strip
+      nil
     end
 
     def join_detail(prefix, detail)
       detail ? "#{prefix}: #{detail}" : prefix
-    end
-
-    def redact(text)
-      key = @configuration.api_key
-      return text.to_s if key.nil? || key.empty?
-
-      text.to_s.gsub(key, "[FILTERED]")
     end
   end
 end

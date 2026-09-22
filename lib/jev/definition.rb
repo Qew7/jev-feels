@@ -48,6 +48,7 @@ module Jev
     def self.normalize_choices(choices)
       raise ArgumentError, "choices must be a Hash" unless choices.is_a?(Hash)
       raise ArgumentError, "choices cannot be empty" if choices.empty?
+      raise ArgumentError, "choices must have at most 255 entries" if choices.size > 255
 
       unique_keys(choices, "choice").freeze
     end
@@ -56,6 +57,7 @@ module Jev
     def self.normalize_levels(levels)
       raise ArgumentError, "levels must be a Hash" unless levels.is_a?(Hash)
       raise ArgumentError, "levels must have at least 2 entries" if levels.size < 2
+      raise ArgumentError, "levels must have at most 10 entries" if levels.size > 10
 
       unique_keys(levels, "level").freeze
     end
