@@ -132,8 +132,8 @@ A `Symbol` must already have a definition or you get `Jev::UndefinedDefinition`.
 ```ruby
 Jev.feels(email.body, :urgent)   # => 0.93
 Jev.feels?(email.body, :urgent)  # => true / false
-Jev.decide(ticket, :support_team) # => :billing
-Jev.score(ticket, :severity)      # => 2.37
+Jev.decide(ticket.description, :support_team) # => :billing
+Jev.score(ticket.description, :severity)      # => 2.37
 ```
 
 `feels` is the calibrated probability (`0.0..1.0`). `feels?` is `feels >= threshold`. The default threshold is `0.5`.
@@ -150,7 +150,7 @@ Ad-hoc questions skip `define`:
 email.body.feels?("sounds like the sender is about to cancel their subscription")
 
 Jev.decide(
-  ticket,
+  ticket.description,
   "Which support team should handle this?",
   choices: {
     billing: "payments and refunds",
@@ -182,7 +182,7 @@ Do not pass both `threshold:` and `at_least:`.
 `decide` uses confidence, which is not the winner's probability:
 
 ```ruby
-Jev.decide(ticket, :support_team, confidence: 0.8)
+Jev.decide(ticket.description, :support_team, confidence: 0.8)
 # => :billing or nil
 ```
 
@@ -191,17 +191,17 @@ Jev.decide(ticket, :support_team, confidence: 0.8)
 Convenience methods collapse a result. `measure` keeps the rest:
 
 ```ruby
-result = Jev.measure(ticket, :urgent)
+result = Jev.measure(ticket.description, :urgent)
 result.probability
 result.type # => :noul
 
-result = Jev.measure(ticket, :support_team)
+result = Jev.measure(ticket.description, :support_team)
 result.choice
 result.confidence
 result.probabilities
 result.type # => :choice
 
-result = Jev.measure(ticket, :severity)
+result = Jev.measure(ticket.description, :severity)
 result.score
 result.confidence
 result.probabilities
@@ -222,7 +222,7 @@ score   # Float
 Several questions, one Jev request, one `state`:
 
 ```ruby
-result = Jev.measure(ticket) do |q|
+result = ticket.measure do |q|
   q.feels :urgent
   q.feels :angry
   q.decide :support_team
@@ -244,7 +244,7 @@ A batch only uses defined names. Ad-hoc strings stay on a single `feels?` / `dec
 `Jev::Result::Batch` uses collapsed values. No extra HTTP calls:
 
 ```ruby
-case Jev.measure(ticket) { |q|
+case ticket.measure { |q|
   q.feels :urgent
   q.decide :support_team
   q.score :severity
@@ -267,14 +267,14 @@ end
 A small dispatch for one `decide`. Low confidence goes to `otherwise`:
 
 ```ruby
-Jev.match(ticket, :support_team) do
+ticket.match(:support_team) do
   on(:billing)   { route_to_billing(ticket) }
   on(:technical) { route_to_technical(ticket) }
   on(:sales)     { route_to_sales(ticket) }
   otherwise      { manual_review(ticket) }
 end
 
-Jev.match(ticket, :support_team, confidence: 0.8) do
+ticket.match(:support_team, confidence: 0.8) do
   on(:billing, :sales) { route_to_commercial(ticket) }
   otherwise            { manual_review(ticket) }
 end
@@ -291,7 +291,7 @@ Jev.stub(
   severity: 2.4
 ) do
   expect(ticket.feels?(:urgent)).to be(true)
-  expect(Jev.decide(ticket, :support_team)).to eq(:billing)
+  expect(ticket.decide(:support_team)).to eq(:billing)
 end
 ```
 
@@ -304,14 +304,14 @@ Record real answers and replay them later. Replay never uses the network. The ta
 ```ruby
 tape = Jev.record do
   ticket.feels?(:urgent)
-  Jev.decide(ticket, :support_team)
+  ticket.decide(:support_team)
 end
 
 json = tape.to_json
 
 Jev.replay(tape) do
   ticket.feels?(:urgent)
-  Jev.decide(ticket, :support_team)
+  ticket.decide(:support_team)
 end
 ```
 
